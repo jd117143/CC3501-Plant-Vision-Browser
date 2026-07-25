@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1"
+    >
+
+    <title>Plant Vision Monitor</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            background: #f3f5f4;
+            color: #1d2520;
+        }
+
+        main {
+            max-width: 1050px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        .video-container {
+            background: #111;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .video-container img {
+            display: block;
+            width: 100%;
+            height: auto;
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns:
+                repeat(auto-fit, minmax(180px, 1fr));
+            gap: 12px;
+            margin-top: 18px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 16px;
+            box-shadow:
+                0 2px 8px rgba(0, 0, 0, 0.08);
+        }
+
+        .label {
+            font-size: 0.85rem;
+            color: #66736b;
+        }
+
+        .value {
+            font-size: 1.15rem;
+            font-weight: bold;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <main>
+        <h1>Plant Vision Monitor</h1>
+
+        <div class="video-container">
+            <img
+                src="/video"
+                alt="Live plant camera stream"
+            >
+        </div>
+
+        <h2>Vision Status</h2>
+
+        <div class="status-grid">
+            <div class="card">
+                <div class="label">Camera</div>
+                <div class="value" id="camera-status">Loading...</div>
+            </div>
+
+            <div class="card">
+                <div class="label">Brightness</div>
+                <div class="value" id="brightness">Loading...</div>
+            </div>
+
+            <div class="card">
+                <div class="label">Pot 1</div>
+                <div class="value" id="pot-1">Loading...</div>
+            </div>
+
+            <div class="card">
+                <div class="label">Pot 2</div>
+                <div class="value" id="pot-2">Loading...</div>
+            </div>
+
+            <div class="card">
+                <div class="label">Pot 3</div>
+                <div class="value" id="pot-3">Loading...</div>
+            </div>
+        </div>
+
+        <h2>Environmental Sensors</h2>
+
+        <div class="status-grid">
+            <div class="card">
+                <div class="label">Temperature</div>
+                <div class="value" id="temperature">Waiting...</div>
+            </div>
+
+            <div class="card">
+                <div class="label">Humidity</div>
+                <div class="value" id="humidity">Waiting...</div>
+            </div>
+
+            <div class="card">
+                <div class="label">Light</div>
+                <div class="value" id="light">Waiting...</div>
+            </div>
+        </div>
+
+        <h2>Soil Moisture</h2>
+
+        <div class="status-grid">
+            <div class="card">
+                <div class="label">Pot 1 Soil</div>
+                <div class="value" id="soil-1">Waiting...</div>
+            </div>
+
+            <div class="card">
+                <div class="label">Pot 2 Soil</div>
+                <div class="value" id="soil-2">Waiting...</div>
+            </div>
+
+            <div class="card">
+                <div class="label">Pot 3 Soil</div>
+                <div class="value" id="soil-3">Waiting...</div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        function formatValue(value, suffix, decimals = 1) {
+            if (
+                value === null ||
+                value === undefined
+            ) {
+                return "Unavailable";
+            }
+
+            return `${Number(value).toFixed(decimals)}${suffix}`;
+        }
+
+        async function updateStatus() {
+            try {
+                const response = await fetch("/status");
+                const data = await response.json();
+
+                document
+                    .getElementById("camera-status")
+                    .textContent = data.camera_status;
+
+                document
+                    .getElementById("brightness")
+                    .textContent =
+                        formatValue(
+                            data.average_brightness,
+                            "",
+                            1
+                        );
+
+                for (const id of [1, 2, 3]) {
+                    document
+                        .getElementById(`pot-${id}`)
+                        .textContent =
+                            data.markers[id].status;
+                }
+
+                document
+                    .getElementById("temperature")
+                    .textContent =
+                        formatValue(
+                            data.temperature,
+                            " °C",
+                            1
+                        );
+
+                document
+                    .getElementById("humidity")
+                    .textContent =
+                        formatValue(
+                            data.humidity,
+                            " %",
+                            1
+                        );
+
+                document
+                    .getElementById("light")
+                    .textContent =
+                        formatValue(
+                            data.light,
+                            " lx",
+                            1
+                        );
+
+                for (const id of [1, 2, 3]) {
+                    document
+                        .getElementById(`soil-${id}`)
+                        .textContent =
+                            formatValue(
+                                data.soil[String(id)],
+                                " %",
+                                1
+                            );
+                }
+            } catch (error) {
+                document
+                    .getElementById("camera-status")
+                    .textContent =
+                        "Connection error";
+
+                console.error(error);
+            }
+        }
+
+        updateStatus();
+        setInterval(updateStatus, 1000);
+    </script>
+</body>
+
+</html>
