@@ -332,44 +332,83 @@ def camera_thread():
     finally:
         pipeline.set_state(Gst.State.NULL)
 
-def uart_thread():
+def send_presence_states(uart):
+    with shared.lock:
+        pot_1_present = (
+            shared.markers[1].status == "PRESENT"
+        )
+        pot_2_present = (
+            shared.markers[2].status == "PRESENT"
+        )
+        pot_3_present = (
+            shared.markers[3].status == "PRESENT"
+        )
 
-    uart = serial.Serial(
-        "/dev/serial0",
-        115200,
-        timeout=1
+    message = (
+        f"PRESENCE,"
+        f"{int(pot_1_present)},"
+        f"{int(pot_2_present)},"
+        f"{int(pot_3_present)}\n"
     )
 
-    print("UART thread started")
+    uart.write(message.encode("utf-8"))
 
-    while True:
+def uart_thread():
+    try:
+        uart = serial.Serial(
+            "/dev/serial0",
+            115200,
+            timeout=0.1
+        )
 
-        raw = uart.readline()
+        uart.reset_input_buffer()
+        print("UART thread started")
 
-        if not raw:
-            continue
+        last_presence_send = 0.0
 
-        try:
-            line = raw.decode().strip()
-        except UnicodeDecodeError:
-            continue
+        while True:
+            raw = uart.readline()
 
-        parts = line.split(",")
+            if raw:
+                line = raw.decode(
+                    "utf-8",
+                    errors="ignore"
+                ).strip()
 
-        if len(parts) == 3 and parts[0] == "SENSOR":
+                if "SENSOR," in line:
+                    line = line[line.find("SENSOR,"):]
 
-            sensor = int(parts[1])
-            value = float(parts[2])
+                elif "CLIMATE," in line:
+                    line = line[line.find("CLIMATE,"):]
 
-            with shared.lock:
-                shared.soil[sensor] = value
+                parts = line.split(",")
 
-        elif len(parts) == 4 and parts[0] == "CLIMATE":
+                try:
+                    if len(parts) == 3 and parts[0] == "SENSOR":
+                        sensor = int(parts[1])
+                        value = float(parts[2])
 
-            with shared.lock:
-                shared.temperature = float(parts[1])
-                shared.humidity = float(parts[2])
-                shared.light = float(parts[3])
+                        if sensor in shared.soil:
+                            with shared.lock:
+                                shared.soil[sensor] = value
+
+                    elif len(parts) == 4 and parts[0] == "CLIMATE":
+                        with shared.lock:
+                            shared.temperature = float(parts[1])
+                            shared.humidity = float(parts[2])
+                            shared.light = float(parts[3])
+
+                except ValueError as error:
+                    print(f"UART parse error: {error}")
+
+            now = time.monotonic()
+
+            if now - last_presence_send >= 1.0:
+                send_presence_states(uart)
+                last_presence_send = now
+
+    except serial.SerialException as error:
+        print(f"UART error: {error}")
 
 def mjpeg_generator():
     while True:
@@ -380,6 +419,7 @@ def mjpeg_generator():
             continue
         yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + jpeg + b"\r\n"
         time.sleep(1.0 / CAMERA_FPS)
+
 
 @app.route("/")
 def index():
